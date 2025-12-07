@@ -1,0 +1,14 @@
+{
+  "name": "space-battle-neon",
+  "version": "1.0.0",
+  "description": "A neon-styled space battle game for the web",
+  "main": "index.html",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}
