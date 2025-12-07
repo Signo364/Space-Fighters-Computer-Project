@@ -12,9 +12,18 @@ except pygame.error:
     print("Audio device not available, continuing without sound.")
 
 WIDTH, HEIGHT = 900, 500
-WIN = pygame.display.set_mode((WIDTH, HEIGHT))
+FULLSCREEN = False
 
-pygame.display.set_caption("SPACE BATTLE - Neon Edition")
+def init_display():
+    global WIN, FULLSCREEN
+    if FULLSCREEN:
+        WIN = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+    else:
+        WIN = pygame.display.set_mode((WIDTH, HEIGHT))
+    pygame.display.set_caption("SPACE BATTLE - Neon Edition")
+    return WIN
+
+WIN = init_display()
 
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
@@ -81,34 +90,36 @@ screen_shake_amount = 0
 screen_shake_decay = 0.85
 
 
-class Nebula:
-    def __init__(self):
-        self.clouds = []
-        for _ in range(8):
-            self.clouds.append({
-                'x': random.randint(0, WIDTH),
-                'y': random.randint(0, HEIGHT),
-                'size': random.randint(100, 250),
-                'color': random.choice([
-                    (30, 0, 60), (0, 20, 50), (40, 0, 40), (0, 30, 40), (20, 0, 40)
-                ]),
-                'speed': random.random() * 0.3 + 0.1,
-                'alpha': random.randint(20, 50)
-            })
+def toggle_fullscreen():
+    global FULLSCREEN, WIN
+    FULLSCREEN = not FULLSCREEN
+    init_display()
+
+
+def render_game_surface():
+    """Create a surface for the game that can be scaled in fullscreen"""
+    return pygame.Surface((WIDTH, HEIGHT))
+
+
+def display_surface(game_surface):
+    """Display the game surface, scaled if in fullscreen"""
+    if FULLSCREEN:
+        screen_w, screen_h = WIN.get_size()
+        scale_factor = min(screen_w / WIDTH, screen_h / HEIGHT)
+        scaled_w = int(WIDTH * scale_factor)
+        scaled_h = int(HEIGHT * scale_factor)
+        scaled_surface = pygame.transform.scale(game_surface, (scaled_w, scaled_h))
+        
+        # Center the game
+        x_offset = (screen_w - scaled_w) // 2
+        y_offset = (screen_h - scaled_h) // 2
+        
+        WIN.fill(BLACK)
+        WIN.blit(scaled_surface, (x_offset, y_offset))
+    else:
+        WIN.blit(game_surface, (0, 0))
     
-    def update(self):
-        for cloud in self.clouds:
-            cloud['x'] -= cloud['speed']
-            if cloud['x'] < -cloud['size']:
-                cloud['x'] = WIDTH + cloud['size']
-                cloud['y'] = random.randint(0, HEIGHT)
-    
-    def draw(self, surface):
-        for cloud in self.clouds:
-            for r in range(cloud['size'], 0, -20):
-                alpha = int(cloud['alpha'] * (r / cloud['size']))
-                color = (cloud['color'][0], cloud['color'][1], cloud['color'][2])
-                pygame.draw.circle(surface, color, (int(cloud['x']), int(cloud['y'])), r)
+    pygame.display.update()
 
 
 class Star:
@@ -377,7 +388,6 @@ class EnergyRing:
 
 particles = []
 energy_rings = []
-nebula = Nebula()
 stars_layer1 = [Star(1) for _ in range(60)]
 stars_layer2 = [Star(2) for _ in range(35)]
 stars_layer3 = [Star(3) for _ in range(20)]
@@ -552,9 +562,6 @@ def draw_ammo_display(surface, x, y, current_ammo, max_ammo, color):
 def draw_animated_background(surface, time):
     surface.fill((5, 5, 15))
     
-    nebula.update()
-    nebula.draw(surface)
-    
     surface.blit(SPACE, (0, 0), special_flags=pygame.BLEND_ADD)
     
     overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
@@ -607,10 +614,11 @@ def draw_control_scheme_screen():
     global game_time
     game_time += 1
     
-    draw_animated_background(WIN, game_time)
+    game_surface = render_game_surface()
+    draw_animated_background(game_surface, game_time)
     
     title_y = 50 + math.sin(game_time * 0.04) * 8
-    draw_neon_text(WIN, "SELECT CONTROLS", TITLE_FONT, 
+    draw_neon_text(game_surface, "SELECT CONTROLS", TITLE_FONT, 
                    WIDTH//2 - TITLE_FONT.size("SELECT CONTROLS")[0]//2, 
                    int(title_y), CYAN, glow_intensity=4)
     
@@ -621,47 +629,47 @@ def draw_control_scheme_screen():
     box1_pulse = math.sin(game_time * 0.1) * 0.2 + 0.8
     for i in range(5, 0, -1):
         glow_color = (0, int(60 * box1_pulse / i), int(100 * box1_pulse / i))
-        pygame.draw.rect(WIN, glow_color, 
+        pygame.draw.rect(game_surface, glow_color, 
                         (box1_x - i*2, box1_y - i*2, box_width + i*4, box_height + i*4), 
                         border_radius=15)
     
-    pygame.draw.rect(WIN, (15, 30, 50), (box1_x, box1_y, box_width, box_height), border_radius=12)
-    pygame.draw.rect(WIN, NEON_BLUE, (box1_x, box1_y, box_width, box_height), 2, border_radius=12)
+    pygame.draw.rect(game_surface, (15, 30, 50), (box1_x, box1_y, box_width, box_height), border_radius=12)
+    pygame.draw.rect(game_surface, NEON_BLUE, (box1_x, box1_y, box_width, box_height), 2, border_radius=12)
     
-    draw_neon_text(WIN, "Press 1: Arrow Keys", MENU_FONT,
+    draw_neon_text(game_surface, "Press 1: Arrow Keys", MENU_FONT,
                    box1_x + 30, box1_y + 20, NEON_BLUE)
-    WIN.blit(INSTRUCTION_FONT.render("Move: Arrow Keys", True, WHITE), (box1_x + 30, box1_y + 60))
-    WIN.blit(INSTRUCTION_FONT.render("Shoot: Right Ctrl", True, WHITE), (box1_x + 30, box1_y + 90))
+    game_surface.blit(INSTRUCTION_FONT.render("Move: Arrow Keys", True, WHITE), (box1_x + 30, box1_y + 60))
+    game_surface.blit(INSTRUCTION_FONT.render("Shoot: Right Ctrl", True, WHITE), (box1_x + 30, box1_y + 90))
     
     box2_y = 310
     box2_pulse = math.sin(game_time * 0.1 + 1) * 0.2 + 0.8
     for i in range(5, 0, -1):
         glow_color = (int(80 * box2_pulse / i), 0, int(60 * box2_pulse / i))
-        pygame.draw.rect(WIN, glow_color, 
+        pygame.draw.rect(game_surface, glow_color, 
                         (box1_x - i*2, box2_y - i*2, box_width + i*4, box_height + i*4), 
                         border_radius=15)
     
-    pygame.draw.rect(WIN, (40, 15, 50), (box1_x, box2_y, box_width, box_height), border_radius=12)
-    pygame.draw.rect(WIN, NEON_PINK, (box1_x, box2_y, box_width, box_height), 2, border_radius=12)
+    pygame.draw.rect(game_surface, (40, 15, 50), (box1_x, box2_y, box_width, box_height), border_radius=12)
+    pygame.draw.rect(game_surface, NEON_PINK, (box1_x, box2_y, box_width, box_height), 2, border_radius=12)
     
-    draw_neon_text(WIN, "Press 2: Mouse Control", MENU_FONT,
+    draw_neon_text(game_surface, "Press 2: Mouse Control", MENU_FONT,
                    box1_x + 30, box2_y + 20, NEON_PINK)
-    WIN.blit(INSTRUCTION_FONT.render("Move: Mouse Position", True, WHITE), (box1_x + 30, box2_y + 60))
-    WIN.blit(INSTRUCTION_FONT.render("Shoot: Left Click", True, WHITE), (box1_x + 30, box2_y + 90))
+    game_surface.blit(INSTRUCTION_FONT.render("Move: Mouse Position", True, WHITE), (box1_x + 30, box2_y + 60))
+    game_surface.blit(INSTRUCTION_FONT.render("Shoot: Left Click", True, WHITE), (box1_x + 30, box2_y + 90))
     
-    pygame.display.update()
+    display_surface(game_surface)
 
 
 def draw_start_screen(control_scheme):
     global game_time
     game_time += 1
     
-    draw_animated_background(WIN, game_time)
+    game_surface = render_game_surface()
+    draw_animated_background(game_surface, game_time)
     
     title_y = 60 + math.sin(game_time * 0.04) * 10
-    title_scale = 1.0 + math.sin(game_time * 0.06) * 0.03
     
-    draw_neon_text(WIN, "SPACE BATTLE", HUGE_FONT,
+    draw_neon_text(game_surface, "SPACE BATTLE", HUGE_FONT,
                    WIDTH//2 - HUGE_FONT.size("SPACE BATTLE")[0]//2,
                    int(title_y), CYAN, glow_intensity=5)
     
@@ -671,30 +679,29 @@ def draw_start_screen(control_scheme):
         int(50 * subtitle_pulse + 100 * (1 - subtitle_pulse)),
         int(255 * (1 - subtitle_pulse) + 200 * subtitle_pulse)
     )
-    draw_neon_text(WIN, "NEON EDITION", MENU_FONT,
+    draw_neon_text(game_surface, "NEON EDITION", MENU_FONT,
                    WIDTH//2 - MENU_FONT.size("NEON EDITION")[0]//2,
                    int(title_y) + 90, subtitle_color)
     
-    blink = int((math.sin(game_time * 0.12) + 1) * 80) + 95
-    start_color = (blink, blink, blink)
-    start_text = INSTRUCTION_FONT.render("Press SPACE to Start", True, start_color)
-    WIN.blit(start_text, (WIDTH//2 - start_text.get_width()//2, 220))
+    blink = int((math.sin(game_time * 0.12) + 1) * 60) + 135
+    restart_text = INSTRUCTION_FONT.render("R - Restart  |  C - Controls  |  F11 - Fullscreen  |  ESC - Quit", True, (blink, blink, blink))
+    game_surface.blit(restart_text, (WIDTH//2 - restart_text.get_width()//2, HEIGHT//2 + 50))
     
     box_x, box_y = WIDTH//2 - 200, 260
-    pygame.draw.rect(WIN, (20, 20, 35), (box_x, box_y, 400, 110), border_radius=12)
-    pygame.draw.rect(WIN, (60, 60, 90), (box_x, box_y, 400, 110), 2, border_radius=12)
+    pygame.draw.rect(game_surface, (20, 20, 35), (box_x, box_y, 400, 110), border_radius=12)
+    pygame.draw.rect(game_surface, (60, 60, 90), (box_x, box_y, 400, 110), 2, border_radius=12)
     
     yellow_text = INSTRUCTION_FONT.render("Yellow: WASD + Left Ctrl", True, YELLOW)
-    WIN.blit(yellow_text, (WIDTH//2 - yellow_text.get_width()//2, box_y + 20))
+    game_surface.blit(yellow_text, (WIDTH//2 - yellow_text.get_width()//2, box_y + 20))
     
     if control_scheme == 1:
         red_text = INSTRUCTION_FONT.render("Red: Arrows + Right Ctrl", True, RED)
     else:
         red_text = INSTRUCTION_FONT.render("Red: Mouse + Left Click", True, RED)
-    WIN.blit(red_text, (WIDTH//2 - red_text.get_width()//2, box_y + 55))
+    game_surface.blit(red_text, (WIDTH//2 - red_text.get_width()//2, box_y + 55))
     
     change_text = SMALL_FONT.render("Press C to change controls", True, (120, 120, 140))
-    WIN.blit(change_text, (WIDTH//2 - change_text.get_width()//2, 390))
+    game_surface.blit(change_text, (WIDTH//2 - change_text.get_width()//2, 390))
     
     ship_float_y = math.sin(game_time * 0.06) * 15
     ship_float_r = math.sin(game_time * 0.06 + math.pi) * 15
@@ -702,20 +709,20 @@ def draw_start_screen(control_scheme):
     ship_bob_y = math.sin(game_time * 0.15) * 3
     ship_bob_r = math.sin(game_time * 0.15 + 0.5) * 3
     
-    WIN.blit(YELLOW_SPACESHIP, (80, 180 + ship_float_y + ship_bob_y))
-    WIN.blit(RED_SPACESHIP, (WIDTH - 130, 180 + ship_float_r + ship_bob_r))
+    game_surface.blit(YELLOW_SPACESHIP, (80, 180 + ship_float_y + ship_bob_y))
+    game_surface.blit(RED_SPACESHIP, (WIDTH - 130, 180 + ship_float_r + ship_bob_r))
     
     for i in range(3):
         spark_x = 135 + random.randint(-2, 2)
         spark_y = 200 + ship_float_y + random.randint(-5, 5)
-        pygame.draw.circle(WIN, CYAN, (spark_x, int(spark_y)), random.randint(1, 3))
+        pygame.draw.circle(game_surface, CYAN, (spark_x, int(spark_y)), random.randint(1, 3))
     
     for i in range(3):
         spark_x = WIDTH - 135 + random.randint(-2, 2)
         spark_y = 200 + ship_float_r + random.randint(-5, 5)
-        pygame.draw.circle(WIN, ORANGE, (spark_x, int(spark_y)), random.randint(1, 3))
+        pygame.draw.circle(game_surface, ORANGE, (spark_x, int(spark_y)), random.randint(1, 3))
     
-    pygame.display.update()
+    display_surface(game_surface)
 
 
 def draw_window(red, yellow, red_bullets, yellow_bullets, red_health, yellow_health, 
@@ -792,30 +799,32 @@ def draw_window(red, yellow, red_bullets, yellow_bullets, red_health, yellow_hea
     draw_ammo_display(temp_surface, 15, 65, yellow_ammo, MAX_BULLETS, YELLOW)
     draw_ammo_display(temp_surface, WIDTH - 69, 65, red_ammo, MAX_BULLETS, RED)
     
-    WIN.blit(temp_surface, (shake_x, shake_y))
-    pygame.display.update()
+    game_surface = pygame.Surface((WIDTH, HEIGHT))
+    game_surface.blit(temp_surface, (shake_x, shake_y))
+    display_surface(game_surface)
 
 
 def draw_winner(text, winner_color):
     global game_time, particles, energy_rings
     game_time += 1
     
-    draw_animated_background(WIN, game_time)
-    draw_neon_border(WIN, game_time)
+    game_surface = render_game_surface()
+    draw_animated_background(game_surface, game_time)
+    draw_neon_border(game_surface, game_time)
     
     for ring in energy_rings[:]:
         ring.update()
         if not ring.alive:
             energy_rings.remove(ring)
         else:
-            ring.draw(WIN)
+            ring.draw(game_surface)
     
     for particle in particles[:]:
         particle.update()
         if not particle.alive:
             particles.remove(particle)
         else:
-            particle.draw(WIN)
+            particle.draw(game_surface)
     
     box_width, box_height = 550, 220
     box_x = WIDTH//2 - box_width//2
@@ -824,12 +833,12 @@ def draw_winner(text, winner_color):
     for i in range(8, 0, -1):
         glow_alpha = 0.15 / i
         glow_color = (int(winner_color[0]*glow_alpha), int(winner_color[1]*glow_alpha), int(winner_color[2]*glow_alpha))
-        pygame.draw.rect(WIN, glow_color, 
+        pygame.draw.rect(game_surface, glow_color, 
                         (box_x - i*3, box_y - i*3, box_width + i*6, box_height + i*6), 
                         border_radius=20)
     
-    pygame.draw.rect(WIN, (15, 15, 25), (box_x, box_y, box_width, box_height), border_radius=15)
-    pygame.draw.rect(WIN, winner_color, (box_x, box_y, box_width, box_height), 3, border_radius=15)
+    pygame.draw.rect(game_surface, (15, 15, 25), (box_x, box_y, box_width, box_height), border_radius=15)
+    pygame.draw.rect(game_surface, winner_color, (box_x, box_y, box_width, box_height), 3, border_radius=15)
     
     text_pulse = math.sin(game_time * 0.1) * 0.1 + 0.9
     pulse_color = (
@@ -838,15 +847,15 @@ def draw_winner(text, winner_color):
         int(winner_color[2] * text_pulse)
     )
     
-    draw_neon_text(WIN, text, WINNER_FONT,
+    draw_neon_text(game_surface, text, WINNER_FONT,
                    WIDTH//2 - WINNER_FONT.size(text)[0]//2,
                    HEIGHT//2 - 50, pulse_color, glow_intensity=5)
     
     blink = int((math.sin(game_time * 0.12) + 1) * 60) + 135
-    restart_text = INSTRUCTION_FONT.render("R - Restart  |  ESC - Quit", True, (blink, blink, blink))
-    WIN.blit(restart_text, (WIDTH//2 - restart_text.get_width()//2, HEIGHT//2 + 50))
+    restart_text = INSTRUCTION_FONT.render("R - Restart  |  F11 - Fullscreen  |  ESC - Quit", True, (blink, blink, blink))
+    game_surface.blit(restart_text, (WIDTH//2 - restart_text.get_width()//2, HEIGHT//2 + 50))
     
-    pygame.display.update()
+    display_surface(game_surface)
 
 
 def game_loop(control_scheme):
@@ -902,6 +911,10 @@ def game_loop(control_scheme):
                         create_muzzle_flash(bullet.x + 14, bullet.y + 3, True)
                         if AUDIO_ENABLED:
                             BULLET_FIRE_SOUND.play()
+                
+                # Fullscreen toggle
+                if event.key == pygame.K_F11 or event.key == pygame.K_f:
+                    toggle_fullscreen()
             
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if control_scheme == 2 and event.button == 1 and len(red_bullets) < MAX_BULLETS:
@@ -950,8 +963,12 @@ def game_loop(control_scheme):
                     if event.type == pygame.KEYDOWN:
                         if event.key == pygame.K_r:
                             return True, control_scheme
+                        if event.key == pygame.K_c:
+                            return "controls", control_scheme
                         if event.key == pygame.K_ESCAPE:
                             return False, control_scheme
+                        if event.key == pygame.K_F11 or event.key == pygame.K_f:
+                            toggle_fullscreen()
             break
 
         keys_pressed = pygame.key.get_pressed()
@@ -1008,6 +1025,19 @@ def red_handle_movement(keys_pressed, red, control_scheme):
             red.y += VEL
     else:
         mouse_x, mouse_y = pygame.mouse.get_pos()
+        
+        # Adjust mouse position if in fullscreen mode
+        if FULLSCREEN:
+            screen_w, screen_h = WIN.get_size()
+            scale_factor = min(screen_w / WIDTH, screen_h / HEIGHT)
+            scaled_w = int(WIDTH * scale_factor)
+            scaled_h = int(HEIGHT * scale_factor)
+            x_offset = (screen_w - scaled_w) // 2
+            y_offset = (screen_h - scaled_h) // 2
+            
+            mouse_x = int((mouse_x - x_offset) / scale_factor)
+            mouse_y = int((mouse_y - y_offset) / scale_factor)
+        
         red_center_x = red.x + red.width // 2
         red_center_y = red.y + red.height // 2
         
@@ -1043,6 +1073,8 @@ def main():
                 elif event.key == pygame.K_2:
                     control_scheme = 2
                     selecting_controls = False
+                elif event.key == pygame.K_F11 or event.key == pygame.K_f:
+                    toggle_fullscreen()
     
     waiting_for_start = True
     while waiting_for_start:
@@ -1073,11 +1105,34 @@ def main():
                                 elif event.key == pygame.K_2:
                                     control_scheme = 2
                                     selecting_controls = False
+                                elif event.key == pygame.K_F11 or event.key == pygame.K_f:
+                                    toggle_fullscreen()
+                elif event.key == pygame.K_F11 or event.key == pygame.K_f:
+                    toggle_fullscreen()
     
     running = True
     while running:
-        restart, control_scheme = game_loop(control_scheme)
-        if not restart:
+        result, control_scheme = game_loop(control_scheme)
+        if result == "controls":
+            selecting_controls = True
+            while selecting_controls:
+                clock.tick(FPS)
+                draw_control_scheme_screen()
+                
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        return
+                    if event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_1:
+                            control_scheme = 1
+                            selecting_controls = False
+                        elif event.key == pygame.K_2:
+                            control_scheme = 2
+                            selecting_controls = False
+                        elif event.key == pygame.K_F11 or event.key == pygame.K_f:
+                            toggle_fullscreen()
+        elif not result:
             running = False
 
     pygame.quit()
